@@ -41,7 +41,7 @@ patch 的行覆盖是浅合并：只给 `id` + `disabled`，原有 `name`、`con
 
 ## 安装
 
-DSH 左侧 **插件** 菜单 → **添加插件**，填入仓库地址即可，不需要 `git clone`：
+DSH 左侧 **插件** 菜单 → **添加插件**，填入仓库地址即可：
 
 ```
 https://github.com/smounives/dsh-rea-switch
