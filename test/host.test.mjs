@@ -252,3 +252,51 @@ test('prefers the live row when both registrations are present', async () => {
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('a successful toggle asks the Plugins page to refresh its inventory', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const file = join(home, 'cordis.patch.yml')
+    await writeFile(file, HOME_PATCH)
+    const events = []
+    const ctx = fakeContext(home)
+    ctx.emit = (...args) => events.push(args)
+
+    await setEnabled(ctx, false)
+    assert.deepEqual(events, [['plugin-manager/changed', { reason: 'dsh-rea-switch' }]])
+    await setEnabled(ctx, true)
+    assert.equal(events.length, 2)
+    assert.deepEqual(events[1], ['plugin-manager/changed', { reason: 'dsh-rea-switch' }])
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('no refresh event is emitted when the row is absent or the patch is unreadable', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const file = join(home, 'cordis.patch.yml')
+    await writeFile(file, '[]\n')
+    const events = []
+    const ctx = fakeContext(home)
+    ctx.emit = (...args) => events.push(args)
+    await assert.rejects(setEnabled(ctx, false), (error) => error.code === 'rea-row-not-configured')
+    assert.deepEqual(events, [])
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('a host without emit still toggles (no remote event bus)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const file = join(home, 'cordis.patch.yml')
+    await writeFile(file, HOME_PATCH)
+    const ctx = Object.assign(fakeContext(home), { emit: undefined })
+    const off = await setEnabled(ctx, false)
+    assert.equal(off.applied, true)
+    assert.equal(managedDisabled(await readFile(file, 'utf8')), true)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})

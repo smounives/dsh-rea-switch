@@ -39,6 +39,22 @@ patch 的行覆盖是浅合并：只给 `id` + `disabled`，原有 `name`、`con
 - 翻转了 → `applied: true`，界面提示「已生效」
 - 没翻转（例如 HMR 被禁用的 headless 宿主）→ `restartRequired: true`，界面提示重启 DSH
 
+## 状态同步
+
+开关面板读的是 **loader 的实时状态**（`findEntry` 遍历 `ctx.loader.entries()`，每 5 秒轮询）；插件页把 `listBundles` 和 `listPlugins` 合成一份视图，其中每行的开关状态也取自实时 loader，但**只在收到 `plugin-manager/changed` 或重连时重新拉取**。本插件直接写 home patch，不经过 `plugin_manager`，所以以前在那个页面上切换，插件页不会重读，就会一直显示旧的「已启用」。
+
+现在每次成功切换后（写盘 + 轮询确认状态翻转），宿主半会补发一个 `plugin-manager/changed`：
+
+```js
+ctx.emit('plugin-manager/changed', { reason: 'dsh-rea-switch' })
+```
+
+插件页收到后重新合成视图，`MCP 客户端` 行随之显示停用/启用。`ctx.emit` 不存在或抛错时静默跳过，无 remote event bus 的 headless 宿主不受影响。
+
+有一处**本来就不该一致**：`dsh-plugin-rea` 的插件卡片仍显示「已启用」，那指的是 bundle 本身还被 profile 选中（它的 `rea-guide` 行仍在运行），不是 `mcp-rea` 这一行的状态。关掉 REA MCP 并不会卸载插件。设置面板里也写明了这点。
+
+反向同步不需要额外代码：在插件页手动开关这一行时，loader 状态会变，开关面板轮询到就会跟着变；只是 home patch 里的覆盖行优先级更高，插件页写进 profile patch 的 `disabled: false` 压不过它——要重新启用请在这个开关面板操作。
+
 ## 安装
 
 DSH 左侧 **插件** 菜单 → **添加插件**，填入仓库地址即可：
@@ -68,7 +84,7 @@ DSH 会直接把它作为依赖装进 profile；装完出现在设置页，改�
 | `lib/patch.js` | 纯函数：受管块的插入/替换/删除，注释与其它行不动 |
 | `lib/client.js` | 客户端半：`settings.section` 面板 + `conversation.composer.dock` 小按钮 |
 | `cordis.patch.yml` | 插入宿主插件行 |
-| `test/*.test.mjs` | 28 个测试：块渲染、幂等、往返还原、CRLF、状态收集、拒绝路径、客户端注册 |
+| `test/*.test.mjs` | 31 个测试：块渲染、幂等、往返还原、CRLF、状态收集、拒绝路径、客户端注册 |
 | `scripts/verify-toggle.mjs` | 端到端验证：写入/移除覆盖块，观察 `rea.mjs` 子进程消失/恢复，结束时还原文件 |
 
 跑测试：
@@ -96,7 +112,7 @@ node scripts/verify-toggle.mjs
 - **编码**：读到 UTF-16 BOM 时拒绝写入并报错，而不是把 UTF-8 的块拼进 UTF-16 文件。Windows 上 PowerShell 5.1 的 `>` 重定向就会写成 UTF-16，遇到这种情况请用 UTF-8 编辑器另存。
 - 唯一平台相关的是 `scripts/verify-toggle.mjs` 里的 `pgrep`（仅 macOS/Linux）：Windows 上自动跳过进程探测，只验证文件往返。
 
-**没有实机验证**：只在 macOS 上跑过（28 个测试 + 真实 home patch 的关→开往返）。测试是纯 Node、无平台依赖，可直接在 Windows/Linux 上 `node --test test/`；生效依赖的 `dsh-hmr` 用 chokidar 监听，跨平台由它保证。
+**没有实机验证**：只在 macOS 上跑过（31 个测试 + 真实 home patch 的关→开往返）。测试是纯 Node、无平台依赖，可直接在 Windows/Linux 上 `node --test test/`；生效依赖的 `dsh-hmr` 用 chokidar 监听，跨平台由它保证。
 
 改宿主半源码后需要重启 DSH 才生效（Node 的 ESM 缓存不会热替换已加载模块）；改客户端半刷新页面即可。
 
