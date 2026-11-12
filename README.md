@@ -41,15 +41,15 @@ patch 的行覆盖是浅合并：只给 `id` + `disabled`，原有 `name`、`con
 
 ## 安装
 
-```sh
-git clone https://github.com/smounives/dsh-rea-switch.git
+DSH 左侧 **插件** 菜单 → **添加插件**，填入仓库地址即可，不需要 `git clone`：
+
+```
+https://github.com/smounives/dsh-rea-switch
 ```
 
-然后在 DSH 里：**设置 → 插件 → 添加插件**，填克隆下来的目录绝对路径。
+DSH 会直接把它作为依赖装进 profile；装完出现在设置页，改完宿主半源码需要重新安装并重启 DSH。没有原生依赖、没有 `postinstall`，macOS / Linux / Windows 都是同一条路径。
 
-也可以让 agent 调 `plugin_manager`（`action: install_bundle`，`target` 填该绝对路径）。
-
-安装会把目录以 `link:` 形式接进 profile 的 `bundles` 列表，无需重启就已经出现在设置页；改完宿主半源码需要重新安装并重启 DSH。没有原生依赖、没有 `postinstall`，macOS / Linux / Windows 都是同一条路径。
+本机开发时，也可以让 agent 调 `plugin_manager`（`action: install_bundle`，`target` 填仓库地址或本地目录绝对路径）。
 
 ## 路由
 
