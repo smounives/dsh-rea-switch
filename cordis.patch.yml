@@ -1,0 +1,5 @@
+# Host half: mounts /plugins/dsh-rea-switch/* for the Settings → REA switch and
+# the composer-dock pill. The Client module renders both.
+- insert:
+    - id: dsh-rea-switch
+      name: dsh-rea-switch

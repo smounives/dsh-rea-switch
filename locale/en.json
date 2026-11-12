@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "REA switch",
+    "description": "Turns the REA MCP server on or off, so its tool definitions stay out of the system prompt when you do not need them."
+  }
+}

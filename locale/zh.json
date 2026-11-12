@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "REA 开关",
+    "description": "一键启用或停用 REA MCP 服务器；不需要它时，它的工具定义不再占用 system prompt。"
+  }
+}

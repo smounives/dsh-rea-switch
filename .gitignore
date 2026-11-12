@@ -1,0 +1,4 @@
+node_modules/
+*.log
+*.rea-switch.tmp
+.DS_Store
