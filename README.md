@@ -1,6 +1,6 @@
 # dsh-rea-switch
 
-DSH 插件：在 **设置 → REA** 里一键启用/停用 REA MCP 服务器（`rea-mcp` 行），并在输入框上方的 dock 里放一个小圆点按钮。
+DSH 插件：在 **设置 → REA** 里一键启用/停用 REA MCP 服务器（`rea-mcp` 或 `mcp-rea` 行），并在输入框上方的 dock 里放一个小圆点按钮。
 
 关闭后，REA 那些 `mcp__rea__*` 工具定义不再进入 system prompt（一台装有完整 REA 的机器上实测：约 229 个工具、~37k tokens，占 57k 系统提示词的绝大部分），下一轮请求起生效；重新打开即恢复。REA 进程也不会启动，省掉一个常驻的 `node rea.mjs mcp`。
 
@@ -21,13 +21,20 @@ home patch 排在 profile patch **之后**，所以往 profile patch 里写 `- i
 # <<< dsh-rea-switch
 ```
 
+行 id 有两种来源，本插件都认，写覆盖块时用实际命中的那个 id：
+
+- `rea-mcp` — 上游 `rea setup --client dsh` 写进 home patch 的 `- insert:` 行；
+- `mcp-rea` — `dsh-plugin-rea`（一键装 REA 的 bundle）自带的行，在 npm 包内的 `cordis.patch.yml` 里，属于 **bundle patch** 层。
+
+两者模块名都是 `@deepseek-ai/dsh-mcp-client`、`serverName` 都是 `rea`，而 DSH 对同名 server 只保留一个，所以同一时刻最多只有一行是活的。bundle 行在 profile patch **之前**就已经被 insert，因此 home patch 末尾那条 `- id: mcp-rea / disabled: true` 同样能覆盖它——两种安装方式都能开关。
+
 patch 的行覆盖是浅合并：只给 `id` + `disabled`，原有 `name`、`config`（command / args / env）都不受影响。启用时这段块被**整段删除**，文件回到原样——所以不会出现「插件替你写了个 `disabled: false`，把你自己在 home patch 里的设置压掉」这种事。
 
 写入用临时文件 + `rename` 原子替换，只动自己这两行标记之间的内容，其余行（注释、`!!js`、其它行）保持字节不变。
 
 ## 生效方式
 
-`dsh-hmr` 监听 profile manifest 和两份用户 patch；home patch 改动后自动重新组合，REA 行被停止/启动。插件在写完后最多轮询 8 秒确认 loader 里的 `rea-mcp` 行状态真的翻转：
+`dsh-hmr` 监听 profile manifest 和两份用户 patch；home patch 改动后自动重新组合，REA 行被停止/启动。插件在写完后最多轮询 8 秒确认 loader 里那一行（`rea-mcp` 或 `mcp-rea`）的状态真的翻转：
 
 - 翻转了 → `applied: true`，界面提示「已生效」
 - 没翻转（例如 HMR 被禁用的 headless 宿主）→ `restartRequired: true`，界面提示重启 DSH
@@ -61,7 +68,7 @@ git clone https://github.com/smounives/dsh-rea-switch.git
 | `lib/patch.js` | 纯函数：受管块的插入/替换/删除，注释与其它行不动 |
 | `lib/client.js` | 客户端半：`settings.section` 面板 + `conversation.composer.dock` 小按钮 |
 | `cordis.patch.yml` | 插入宿主插件行 |
-| `test/*.test.mjs` | 22 个测试：块渲染、幂等、往返还原、CRLF、状态收集、拒绝路径、客户端注册 |
+| `test/*.test.mjs` | 28 个测试：块渲染、幂等、往返还原、CRLF、状态收集、拒绝路径、客户端注册 |
 | `scripts/verify-toggle.mjs` | 端到端验证：写入/移除覆盖块，观察 `rea.mjs` 子进程消失/恢复，结束时还原文件 |
 
 跑测试：
@@ -89,13 +96,13 @@ node scripts/verify-toggle.mjs
 - **编码**：读到 UTF-16 BOM 时拒绝写入并报错，而不是把 UTF-8 的块拼进 UTF-16 文件。Windows 上 PowerShell 5.1 的 `>` 重定向就会写成 UTF-16，遇到这种情况请用 UTF-8 编辑器另存。
 - 唯一平台相关的是 `scripts/verify-toggle.mjs` 里的 `pgrep`（仅 macOS/Linux）：Windows 上自动跳过进程探测，只验证文件往返。
 
-**没有实机验证**：只在 macOS 上跑过（22 个测试 + 真实 home patch 的关→开往返）。测试是纯 Node、无平台依赖，可直接在 Windows/Linux 上 `node --test test/`；生效依赖的 `dsh-hmr` 用 chokidar 监听，跨平台由它保证。
+**没有实机验证**：只在 macOS 上跑过（28 个测试 + 真实 home patch 的关→开往返）。测试是纯 Node、无平台依赖，可直接在 Windows/Linux 上 `node --test test/`；生效依赖的 `dsh-hmr` 用 chokidar 监听，跨平台由它保证。
 
 改宿主半源码后需要重启 DSH 才生效（Node 的 ESM 缓存不会热替换已加载模块）；改客户端半刷新页面即可。
 
 ## 已知边界
 
-- 只认 `id: rea-mcp` 且模块名为 `@deepseek-ai/dsh-mcp-client` 的行；同名不同模块时拒绝动手。
-- 如果 `rea-mcp` 行被删掉，状态显示「未配置」，开关禁用（没有可开关的对象）。
+- 只认 `id: rea-mcp` 或 `id: mcp-rea`、且模块名为 `@deepseek-ai/dsh-mcp-client` 的行；同名不同模块时拒绝动手。两行同时存在时优先取正在运行、且模块名匹配的那一行（DSH 对同名 server 只会让一行生效）。
+- 如果这两种行都不存在（没跑过 `rea setup --client dsh`，也没装 `dsh-plugin-rea`），状态显示「未配置」，开关禁用（没有可开关的对象）。
 - 启动参数 `--patch` 的 overlay 优先级高于 home patch，那种情况下写入了也不会翻转，界面会提示重启而不是假装成功。
 - 这里的「229 个工具 / ~37k tokens」是本机 2026-11 的实测值，仅作提示文案，不参与逻辑。

@@ -52,6 +52,43 @@ function fakeContext(home, { moduleName = '@deepseek-ai/dsh-mcp-client', tools }
   }
 }
 
+/**
+ * A fake host context for the `dsh-plugin-rea` bundle row.
+ *
+ * That row is inserted by the package's own `cordis.patch.yml` (a bundle patch), so
+ * it exists even when no home patch file was ever written; only its `disabled`
+ * state comes from the managed block in the home patch.
+ */
+function bundleContext(home, { moduleName = '@deepseek-ai/dsh-mcp-client', rowId = 'mcp-rea' } = {}) {
+  return {
+    get(key) {
+      if (key === 'profileContext') return { home }
+      if (key === 'loader') {
+        return {
+          entries() {
+            let text = ''
+            try {
+              text = readFileSync(join(home, 'cordis.patch.yml'), 'utf8')
+            } catch {
+              /* no home patch: the bundle row is still there */
+            }
+            return [
+              {
+                options: { id: rowId, name: moduleName },
+                get disabled() {
+                  return managedDisabled(text) === true
+                },
+                fiber: {},
+              },
+            ]
+          },
+        }
+      }
+      return undefined
+    },
+  }
+}
+
 test('collectStatus reports a configured, enabled row', async () => {
   const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
   try {
@@ -151,6 +188,66 @@ test('refuses to append to a UTF-16 patch', async () => {
     const status = await collectStatus(fakeContext(home))
     assert.equal(status.patch.managed, false)
     await assert.rejects(setEnabled(fakeContext(home), false), (error) => error.code === 'patch-encoding-unsupported')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('collectStatus finds the dsh-plugin-rea bundle row without a home patch', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const status = await collectStatus(bundleContext(home))
+    assert.equal(status.configured, true)
+    assert.equal(status.enabled, true)
+    assert.equal(status.target.rowId, 'mcp-rea')
+    assert.deepEqual(status.target.acceptedRowIds, ['rea-mcp', 'mcp-rea'])
+    assert.equal(status.patch.exists, false, 'no home patch is needed for a bundle row')
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('setEnabled writes the override with the bundle row id', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const file = join(home, 'cordis.patch.yml')
+
+    const off = await setEnabled(bundleContext(home), false)
+    const written = await readFile(file, 'utf8')
+    assert.equal(off.applied, true)
+    assert.equal(off.status.target.rowId, 'mcp-rea')
+    assert.ok(written.includes('- id: mcp-rea'), 'the block targets the id that exists')
+    assert.ok(!written.includes('- id: rea-mcp'), 'no block is written for the absent row')
+    assert.equal(managedDisabled(written), true)
+
+    const on = await setEnabled(bundleContext(home), true)
+    assert.equal(on.applied, true)
+    assert.equal(await readFile(file, 'utf8'), '[]\n')
+    assert.equal(on.status.enabled, true)
+  } finally {
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('prefers the live row when both registrations are present', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'rea-switch-'))
+  try {
+    const ctx = {
+      get(key) {
+        if (key === 'profileContext') return { home }
+        if (key === 'loader') {
+          return {
+            entries: () => [
+              { options: { id: 'rea-mcp', name: '@deepseek-ai/dsh-mcp-client' }, disabled: false },
+              { options: { id: 'mcp-rea', name: '@deepseek-ai/dsh-mcp-client' }, disabled: false, fiber: {} },
+            ],
+          }
+        }
+        return undefined
+      },
+    }
+    const status = await collectStatus(ctx)
+    assert.equal(status.target.rowId, 'mcp-rea', 'the running row wins over the idle one')
   } finally {
     await rm(home, { recursive: true, force: true })
   }

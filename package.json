@@ -1,6 +1,6 @@
 {
   "name": "dsh-rea-switch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DeepSeek Harness 设置页开关：一键启用/停用 REA MCP 服务器（rea-mcp 行），并显示它对 system prompt 的开销。",
   "repository": {
     "type": "git",

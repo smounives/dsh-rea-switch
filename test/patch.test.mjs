@@ -5,6 +5,7 @@ import {
   MARK_END,
   MARK_START,
   ROW_ID,
+  ROW_IDS,
   hasManagedBlock,
   managedDisabled,
   renderPatch,
@@ -97,4 +98,26 @@ test('preserves trailing spaces and blank-line runs elsewhere', () => {
   assert.ok(off.includes('    - id: other   \n'), 'trailing spaces are not stripped')
   assert.ok(off.includes('\n\n\n# note\n'), 'blank-line runs are not collapsed')
   assert.equal(renderPatch(off, false), text)
+})
+
+test('writes the row id the caller found instead of a hard-coded one', () => {
+  const off = renderPatch(HOME_PATCH, true, 'mcp-rea')
+  const start = off.split('\n').indexOf(MARK_START)
+  assert.deepEqual(off.split('\n').slice(start + 1, start + 3), ['- id: mcp-rea', '  disabled: true'])
+  assert.equal(managedDisabled(off), true)
+})
+
+test('retargets an existing block to the id the caller found', () => {
+  const first = renderPatch(HOME_PATCH, true, 'rea-mcp')
+  const second = renderPatch(first, true, 'mcp-rea')
+  const lines = second.split('\n')
+  const start = lines.indexOf(MARK_START)
+  assert.deepEqual(lines.slice(start + 1, start + 3), ['- id: mcp-rea', '  disabled: true'])
+  assert.equal(lines.filter((line) => line.trim() === MARK_START).length, 1, 'still exactly one block')
+  assert.equal(managedDisabled(second), true)
+})
+
+test('the accepted row ids are the two REA registrations', () => {
+  assert.deepEqual(ROW_IDS, ['rea-mcp', 'mcp-rea'])
+  assert.equal(ROW_IDS.includes(ROW_ID), true)
 })
